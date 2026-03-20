@@ -1,11 +1,8 @@
 cask "localhost" do
-  arch arm: "aarch64", intel: "x64"
-
   version "0.1.0"
-  sha256 arm:   "PLACEHOLDER_ARM64_SHA256",
-         intel: "PLACEHOLDER_X64_SHA256"
+  sha256 "9a233d81f45d79be0e2cead436f0e68ca71a1bce84ea4528e6749f7814403f9f"
 
-  url "https://github.com/efeecllk/localhost/releases/download/v#{version}/localhost_#{version}_#{arch}.dmg"
+  url "https://github.com/efeecllk/localhost/releases/download/v#{version}/localhost_#{version}_aarch64.dmg"
   name "localhost"
   desc "macOS menu bar app that auto-detects running dev processes grouped by project"
   homepage "https://github.com/efeecllk/localhost"
