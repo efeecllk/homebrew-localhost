@@ -1,6 +1,6 @@
 cask "localhost" do
-  version "0.1.0"
-  sha256 "9a233d81f45d79be0e2cead436f0e68ca71a1bce84ea4528e6749f7814403f9f"
+  version "0.1.2"
+  sha256 "b3ebc4a15dc11c67961b6d18ce50baf4eb71b16dc890a683709876c2f0a4f825"
 
   url "https://github.com/efeecllk/localhost/releases/download/v#{version}/localhost_#{version}_aarch64.dmg"
   name "localhost"
