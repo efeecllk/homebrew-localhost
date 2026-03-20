@@ -1,0 +1,132 @@
+name: Update Cask on Release
+
+on:
+  repository_dispatch:
+    types: [update-tap]
+
+jobs:
+  update-cask:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: release
+        env:
+          TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download DMGs and calculate SHA256
+        id: sha
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          ARM_URL="https://github.com/efeecllk/localhost/releases/download/v${VERSION}/localhost_${VERSION}_aarch64.dmg"
+          echo "Downloading ARM64 from: $ARM_URL"
+          curl -L -o arm64.dmg "$ARM_URL"
+          ARM_SHA=$(shasum -a 256 arm64.dmg | cut -d' ' -f1)
+          echo "arm_sha=$ARM_SHA" >> "$GITHUB_OUTPUT"
+          echo "ARM64 SHA256: $ARM_SHA"
+
+          INTEL_URL="https://github.com/efeecllk/localhost/releases/download/v${VERSION}/localhost_${VERSION}_x64.dmg"
+          echo "Downloading Intel from: $INTEL_URL"
+          if curl -L --fail -o intel.dmg "$INTEL_URL"; then
+            INTEL_SHA=$(shasum -a 256 intel.dmg | cut -d' ' -f1)
+            echo "intel_sha=$INTEL_SHA" >> "$GITHUB_OUTPUT"
+            echo "Intel SHA256: $INTEL_SHA"
+          else
+            echo "Intel DMG not found, will use ARM64 only"
+            echo "intel_sha=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update cask formula
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          ARM_SHA: ${{ steps.sha.outputs.arm_sha }}
+          INTEL_SHA: ${{ steps.sha.outputs.intel_sha }}
+        run: |
+          if [ -n "$INTEL_SHA" ]; then
+            cat > Casks/localhost.rb << 'CASK_HEADER'
+          cask "localhost" do
+            arch arm: "aarch64", intel: "x64"
+
+          CASK_HEADER
+            echo "  version \"$VERSION\"" >> Casks/localhost.rb
+            echo "  sha256 arm:   \"$ARM_SHA\"," >> Casks/localhost.rb
+            echo "         intel: \"$INTEL_SHA\"" >> Casks/localhost.rb
+            cat >> Casks/localhost.rb << 'CASK_FOOTER'
+
+            url "https://github.com/efeecllk/localhost/releases/download/v#{version}/localhost_#{version}_#{arch}.dmg"
+            name "localhost"
+            desc "macOS menu bar app that auto-detects running dev processes grouped by project"
+            homepage "https://github.com/efeecllk/localhost"
+
+            depends_on macos: ">= :ventura"
+
+            app "localhost.app"
+
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-cr", "#{appdir}/localhost.app"],
+                             sudo: false
+            end
+
+            zap trash: [
+              "~/Library/Application Support/com.efecelik.localhost",
+              "~/Library/Caches/com.efecelik.localhost",
+              "~/Library/Preferences/com.efecelik.localhost.plist",
+              "~/Library/Saved Application State/com.efecelik.localhost.savedState",
+            ]
+          end
+          CASK_FOOTER
+          else
+            cat > Casks/localhost.rb << 'CASK_HEADER'
+          cask "localhost" do
+          CASK_HEADER
+            echo "  version \"$VERSION\"" >> Casks/localhost.rb
+            echo "  sha256 \"$ARM_SHA\"" >> Casks/localhost.rb
+            cat >> Casks/localhost.rb << 'CASK_FOOTER'
+
+            url "https://github.com/efeecllk/localhost/releases/download/v#{version}/localhost_#{version}_aarch64.dmg"
+            name "localhost"
+            desc "macOS menu bar app that auto-detects running dev processes grouped by project"
+            homepage "https://github.com/efeecllk/localhost"
+
+            depends_on macos: ">= :ventura"
+            depends_on arch: :arm64
+
+            app "localhost.app"
+
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-cr", "#{appdir}/localhost.app"],
+                             sudo: false
+            end
+
+            zap trash: [
+              "~/Library/Application Support/com.efecelik.localhost",
+              "~/Library/Caches/com.efecelik.localhost",
+              "~/Library/Preferences/com.efecelik.localhost.plist",
+              "~/Library/Saved Application State/com.efecelik.localhost.savedState",
+            ]
+          end
+          CASK_FOOTER
+          fi
+
+          echo "Updated cask file:"
+          cat Casks/localhost.rb
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git diff --cached --quiet || git commit -m "Update to v$VERSION"
+          git push
